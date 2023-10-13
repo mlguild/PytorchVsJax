@@ -10,14 +10,40 @@ from batch_ops import BatchConv2DLayer, BatchLinearLayer
 device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 
 
-def benchmark(layer, x, weights, biases=None, y=None, backward=True, R=100):
+def benchmark(
+    layer,
+    x,
+    weights,
+    biases=None,
+    y=None,
+    dtype=torch.float32,
+    mode="normal",
+    R=10,
+):
+    if dtype == torch.bfloat16 and not x.is_cuda:
+        print("BF16 requires CUDA. Skipping this benchmark.")
+        return
+
+    # Convert data types
+    x = x.to(dtype)
+    weights = [w.to(dtype) for w in weights]
+    if biases:
+        biases = [b.to(dtype) for b in biases]
+
+    # Apply JIT methods
+    if mode == "trace":
+        with torch.no_grad():
+            layer = torch.jit.trace(layer, (x, *weights, *biases))
+    elif mode == "script":
+        layer = torch.jit.script(layer)
+
     timings = []
 
     for _ in range(R):
         start_time = time()
         out = layer(x, *weights, *biases)
 
-        if y is not None and backward:
+        if y is not None:
             criterion = torch.nn.CrossEntropyLoss()
             out = out.reshape(-1, out.shape[-1])
             loss = criterion(out, y.view(-1))
@@ -26,11 +52,11 @@ def benchmark(layer, x, weights, biases=None, y=None, backward=True, R=100):
         end_time = time()
         timings.append(end_time - start_time)
 
-    mean_time = torch.tensor(timings).mean()
-    std_time = torch.tensor(timings).std()
-    max_time = torch.tensor(timings).max()
-    min_time = torch.tensor(timings).min()
-    median_time = torch.tensor(timings).median()
+    mean_time = torch.tensor(timings).mean().item()
+    std_time = torch.tensor(timings).std().item()
+    max_time = torch.tensor(timings).max().item()
+    min_time = torch.tensor(timings).min().item()
+    median_time = torch.median(torch.tensor(timings)).item()
 
     return {
         "mean": mean_time,
@@ -120,7 +146,7 @@ def main():
             try:
                 wandb.init(
                     project="pytorch-vs-jax-benchmarking",
-                    name=f"model-benchmark-B{B}-N{N}",
+                    name=f"pytorch-benchmark-B{B}-N{N}",
                     reinit=True,
                 )
                 wandb.config.num_models = B
