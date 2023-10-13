@@ -18,14 +18,16 @@ def benchmark(
     biases: Optional[Tuple[torch.Tensor]] = None,
     y: Optional[torch.Tensor] = None,
     backward: bool = True,
-    R: int = 10,
+    R: int = 1000,
     dtype: torch.dtype = torch.float32,
     jit_method: Optional[str] = None,
-) -> Dict[str, float]:
+) -> Dict[str, Dict[str, float]]:
     """
     Benchmark a given layer/model for forward and backward pass.
     """
-    timings = []
+    fprop_timings = []
+    bprop_timings = []
+    combined_timings = []
 
     # Convert tensors to the desired data type
     layer = layer.to(dtype=dtype)
@@ -49,28 +51,41 @@ def benchmark(
 
         start_time = time()
         out = layer(x, *weights, *biases)
+        fprop_timings.append(time() - start_time)
 
         if y is not None and backward:
             criterion = torch.nn.CrossEntropyLoss()
             out = out.reshape(-1, out.shape[-1])
             loss = criterion(out, y.view(-1))
+
+            start_time = time()
             loss.backward()
+            bprop_timings.append(time() - start_time)
 
-        end_time = time()
-        timings.append(end_time - start_time)
+        combined_timings.append(
+            fprop_timings[-1] + (bprop_timings[-1] if bprop_timings else 0)
+        )
 
-    mean_time = sum(timings) / R
-    std_time = (sum([(mean_time - t) ** 2 for t in timings]) / R) ** 0.5
-    max_time = max(timings)
-    min_time = min(timings)
-    median_time = sorted(timings)[R // 2]
+    def compute_stats(timings):
+        timings_tensor = torch.tensor(timings)
+        mean_time = torch.mean(timings_tensor).item()
+        std_time = torch.std(timings_tensor).item()
+        max_time = torch.max(timings_tensor).item()
+        min_time = torch.min(timings_tensor).item()
+        median_time = torch.median(timings_tensor).item()
+
+        return {
+            "mean": mean_time,
+            "std": std_time,
+            "max": max_time,
+            "min": min_time,
+            "median": median_time,
+        }
 
     return {
-        "mean": mean_time,
-        "std": std_time,
-        "max": max_time,
-        "min": min_time,
-        "median": median_time,
+        "fprop": compute_stats(fprop_timings),
+        "bprop": compute_stats(bprop_timings),
+        "combined": compute_stats(combined_timings),
     }
 
 
