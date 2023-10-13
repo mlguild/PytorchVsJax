@@ -14,17 +14,12 @@ This benchmarking exercise revolves around:
 
 ## Directory Structure
 
-├── batch_ops_example.py # Example usage of batch operations
-
-├── batch_ops.py # Core implementation of batch operations
-
-├── bench_pytorch.py # PyTorch benchmarking script
-
-├── env.sh # Environment setup script
-
-├── LICENSE # License information
-
-└── README.md # This README file
+- `batch_ops_example.py` - Example usage of batch operations
+- `batch_ops.py` - Core implementation of batch operations
+- `bench_pytorch.py` - PyTorch benchmarking script
+- `env.sh` - Environment setup script
+- `LICENSE` - License information
+- `README.md` - This README file
 
 
 ## How to Run
