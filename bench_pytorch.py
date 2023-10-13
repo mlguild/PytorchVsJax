@@ -173,6 +173,7 @@ def main():
                     mlp_net, x, mlp_weights, mlp_biases, y=y
                 )
                 wandb.log({"4-layer MLP Benchmark Time": mlp_net_time})
+                wandb.log({"num_models": B, "batch_size": N})
             except Exception as e:
                 # Log the exception to the console
                 print(f"Error during benchmark with B={B} and N={N}: {e}")
