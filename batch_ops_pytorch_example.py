@@ -1,7 +1,11 @@
 import torch
 import torch.nn as nn
 
-from batch_ops import BatchConv1DLayer, BatchConv2DLayer, BatchLinearLayer
+from batch_ops_pytorch import (
+    BatchConv1DLayer,
+    BatchConv2DLayer,
+    BatchLinearLayer,
+)
 
 x = torch.ones(100, 50, 3, 32, 32)
 params = torch.empty(100, 64, 3, 3, 3)
