@@ -7,8 +7,6 @@ import jax
 from flax import linen as nn
 import wandb
 import jax.numpy as jnp
-from jax import config
-config.update("jax_disable_jit", True)
 
 class MLP(nn.Module):
     hidden_dims : Sequence[int]
