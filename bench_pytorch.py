@@ -1,43 +1,91 @@
 from time import time
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import wandb
-from batch_ops import BatchConv2DLayer, BatchLinearLayer
+from batch_ops_pytorch import BatchConv2DLayer, BatchLinearLayer
 
 device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 
 
-def benchmark(layer, x, weights, biases=None, y=None, backward=True, R=100):
-    timings = []
+def benchmark(
+    layer: nn.Module,
+    x: torch.Tensor,
+    weights: Tuple[torch.Tensor],
+    biases: Optional[Tuple[torch.Tensor]] = None,
+    y: Optional[torch.Tensor] = None,
+    backward: bool = True,
+    R: int = 1000,
+    dtype: torch.dtype = torch.float32,
+    jit_method: Optional[str] = None,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Benchmark a given layer/model for forward and backward pass.
+    """
+    fprop_timings = []
+    bprop_timings = []
+    combined_timings = []
+
+    # Convert tensors to the desired data type
+    layer = layer.to(dtype=dtype)
+    x = x.to(dtype=dtype)
+    weights = tuple(w.to(dtype=dtype) for w in weights)
+    if biases:
+        biases = tuple(b.to(dtype=dtype) for b in biases)
+
+    # Apply JIT methods if specified
+    if jit_method == "trace":
+        layer = torch.jit.trace(layer, (x, *weights, *biases))
+    elif jit_method == "script":
+        layer = torch.jit.script(layer)
 
     for _ in range(R):
+        if x.grad:
+            x.grad.zero_()
+        for w in weights:
+            if w.grad:
+                w.grad.zero_()
+
         start_time = time()
         out = layer(x, *weights, *biases)
+        fprop_timings.append(time() - start_time)
 
         if y is not None and backward:
             criterion = torch.nn.CrossEntropyLoss()
             out = out.reshape(-1, out.shape[-1])
             loss = criterion(out, y.view(-1))
+
+            start_time = time()
             loss.backward()
+            bprop_timings.append(time() - start_time)
 
-        end_time = time()
-        timings.append(end_time - start_time)
+        combined_timings.append(
+            fprop_timings[-1] + (bprop_timings[-1] if bprop_timings else 0)
+        )
 
-    mean_time = torch.tensor(timings).mean()
-    std_time = torch.tensor(timings).std()
-    max_time = torch.tensor(timings).max()
-    min_time = torch.tensor(timings).min()
-    median_time = torch.tensor(timings).median()
+    def compute_stats(timings):
+        timings_tensor = torch.tensor(timings)
+        mean_time = torch.mean(timings_tensor).item()
+        std_time = torch.std(timings_tensor).item()
+        max_time = torch.max(timings_tensor).item()
+        min_time = torch.min(timings_tensor).item()
+        median_time = torch.median(timings_tensor).item()
+
+        return {
+            "mean": mean_time,
+            "std": std_time,
+            "max": max_time,
+            "min": min_time,
+            "median": median_time,
+        }
 
     return {
-        "mean": mean_time,
-        "std": std_time,
-        "max": max_time,
-        "min": min_time,
-        "median": median_time,
+        "fprop": compute_stats(fprop_timings),
+        "bprop": compute_stats(bprop_timings),
+        "combined": compute_stats(combined_timings),
     }
 
 
@@ -115,70 +163,81 @@ def main():
     num_classes = 10
 
     # Looping over different values of B and N for benchmarking
-    for B in [1, 10, 50, 100]:
-        for N in [1, 10, 50, 100, 500]:
-            try:
-                wandb.init(
-                    project="pytorch-vs-jax-benchmarking",
-                    name=f"model-benchmark-B{B}-N{N}",
-                    reinit=True,
-                )
-                wandb.config.num_models = B
-                wandb.config.batch_size = N
+    dtypes = [torch.float32, torch.float16, torch.bfloat16]
+    modes = ["normal", "trace", "script"]
 
-                x = torch.randn(B, N, C, H, W, requires_grad=True).to(device)
-                y = torch.randint(0, num_classes, (B, N)).to(device)
+    for dtype in dtypes:
+        for mode in modes:
+            for B in [1, 10, 50, 100]:
+                for N in [1, 10, 50, 100, 500]:
+                    try:
+                        wandb.init(
+                            project="pytorch-vs-jax-benchmarking",
+                            name=f"pytorch-benchmark-B{B}-N{N}-dtype{dtype}-mode{mode}",
+                            reinit=True,
+                        )
+                        wandb.config.num_models = B
+                        wandb.config.batch_size = N
 
-                # Single Layer Benchmark
-                single_layer_bench(x, y, B, N, C, H, W, num_classes)
+                        x = torch.randn(B, N, C, H, W, requires_grad=True).to(
+                            device
+                        )
+                        y = torch.randint(0, num_classes, (B, N)).to(device)
 
-                # ConvNet Benchmark
-                conv_net = ConvNetWithGlobalPooling(channel_in=3).to(device)
-                conv_weights = (
-                    torch.randn(B, 64, C, 3, 3).to(device),
-                    torch.randn(B, 128, 64, 3, 3).to(device),
-                    torch.randn(B, 256, 128, 3, 3).to(device),
-                    torch.randn(B, 256, num_classes).to(device),
-                )
-                conv_biases = (
-                    torch.randn(B, 64).to(device),
-                    torch.randn(B, 128).to(device),
-                    torch.randn(B, 256).to(device),
-                    torch.randn(B, num_classes).to(device),
-                )
-                conv_net_time = benchmark(
-                    conv_net, x, conv_weights, conv_biases, y=y
-                )
-                wandb.log(
-                    {
-                        "ConvNet with Global Pooling Benchmark Time": conv_net_time
-                    }
-                )
+                        # Single Layer Benchmark
+                        single_layer_bench(x, y, B, N, C, H, W, num_classes)
 
-                # 4-layer MLP Benchmark
-                mlp_net = FourLayerMLP().to(device)
-                mlp_weights = (
-                    torch.randn(B, C * H * W, 512).to(device),
-                    torch.randn(B, 512, 256).to(device),
-                    torch.randn(B, 256, 128).to(device),
-                    torch.randn(B, 128, num_classes).to(device),
-                )
-                mlp_biases = (
-                    torch.randn(B, 512).to(device),
-                    torch.randn(B, 256).to(device),
-                    torch.randn(B, 128).to(device),
-                    torch.randn(B, num_classes).to(device),
-                )
-                mlp_net_time = benchmark(
-                    mlp_net, x, mlp_weights, mlp_biases, y=y
-                )
-                wandb.log({"4-layer MLP Benchmark Time": mlp_net_time})
-                wandb.log({"num_models": B, "batch_size": N})
-            except Exception as e:
-                # Log the exception to the console
-                print(f"Error during benchmark with B={B} and N={N}: {e}")
-                # Log the exception to wandb
-                wandb.log({"error": str(e)})
+                        # ConvNet Benchmark
+                        conv_net = ConvNetWithGlobalPooling(channel_in=3).to(
+                            device
+                        )
+                        conv_weights = (
+                            torch.randn(B, 64, C, 3, 3).to(device),
+                            torch.randn(B, 128, 64, 3, 3).to(device),
+                            torch.randn(B, 256, 128, 3, 3).to(device),
+                            torch.randn(B, 256, num_classes).to(device),
+                        )
+                        conv_biases = (
+                            torch.randn(B, 64).to(device),
+                            torch.randn(B, 128).to(device),
+                            torch.randn(B, 256).to(device),
+                            torch.randn(B, num_classes).to(device),
+                        )
+                        conv_net_time = benchmark(
+                            conv_net, x, conv_weights, conv_biases, y=y
+                        )
+                        wandb.log(
+                            {
+                                "ConvNet with Global Pooling Benchmark Time": conv_net_time
+                            }
+                        )
+
+                        # 4-layer MLP Benchmark
+                        mlp_net = FourLayerMLP().to(device)
+                        mlp_weights = (
+                            torch.randn(B, C * H * W, 512).to(device),
+                            torch.randn(B, 512, 256).to(device),
+                            torch.randn(B, 256, 128).to(device),
+                            torch.randn(B, 128, num_classes).to(device),
+                        )
+                        mlp_biases = (
+                            torch.randn(B, 512).to(device),
+                            torch.randn(B, 256).to(device),
+                            torch.randn(B, 128).to(device),
+                            torch.randn(B, num_classes).to(device),
+                        )
+                        mlp_net_time = benchmark(
+                            mlp_net, x, mlp_weights, mlp_biases, y=y
+                        )
+                        wandb.log({"4-layer MLP Benchmark Time": mlp_net_time})
+                        wandb.log({"num_models": B, "batch_size": N})
+                    except Exception as e:
+                        # Log the exception to the console
+                        print(
+                            f"Error during benchmark with B={B} and N={N}: {e}"
+                        )
+                        # Log the exception to wandb
+                        wandb.log({"error": str(e)})
 
 
 if __name__ == "__main__":
