@@ -68,11 +68,11 @@ def benchmark(
 
     def compute_stats(timings):
         timings_tensor = torch.tensor(timings)
-        mean_time = torch.mean(timings_tensor).item()
-        std_time = torch.std(timings_tensor).item()
-        max_time = torch.max(timings_tensor).item()
-        min_time = torch.min(timings_tensor).item()
-        median_time = torch.median(timings_tensor).item()
+        mean_time = torch.mean(timings_tensor)
+        std_time = torch.std(timings_tensor)
+        max_time = torch.max(timings_tensor)
+        min_time = torch.min(timings_tensor)
+        median_time = torch.median(timings_tensor)
 
         return {
             "mean": mean_time,
@@ -84,7 +84,7 @@ def benchmark(
 
     return {
         "fprop": compute_stats(fprop_timings),
-        "bprop": compute_stats(bprop_timings),
+        "bprop": compute_stats(bprop_timings) if backward else None,
         "combined": compute_stats(combined_timings),
     }
 
