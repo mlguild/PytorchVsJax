@@ -166,4 +166,4 @@ if __name__ == '__main__':
                 # Log the exception to the console
                 print(f"Error during benchmark with B={B} and N={N}: {e}")
                 # Log the exception to wandb
-                #wandb.log({"error": str(e)})
+                wandb.log({"error": str(e)})
