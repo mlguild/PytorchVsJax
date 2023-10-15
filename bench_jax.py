@@ -110,6 +110,14 @@ if __name__ == '__main__':
     for B in [1, 10, 50, 100]:
         for N in [1, 10, 50, 100, 500]:
             try:
+                wandb.init(
+                            project="pytorch-vs-jax-benchmarking",
+                            name=f"jax-benchmark-B{B}-N{N}",
+                            reinit=True,
+                        )
+                wandb.config.num_models = B
+                wandb.config.batch_size = N
+
                 x = jax.random.normal(key, shape=(B, N, H, W, C))
                 y = jax.random.randint(key, (B,N), 0, num_classes)
 
@@ -119,14 +127,16 @@ if __name__ == '__main__':
                             }
                 trainer = Trainer(MLP, B, mlp_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, backward=False)
+                timings = trainer.benchmark(params, x, backward=False)
+                wandb.log({"MLP Benchmark Time": timings})
 
                 # Single Layer Convolution
                 cnn_args = {"features": num_classes,
                             "kernel_size": (3, 3),}
                 trainer = Trainer(nn.Conv, B, cnn_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, backward=False)
+                timings = trainer.benchmark(params, x, backward=False)
+                wandb.log({"Conv Layer Benchmark Time": timings})
 
                 # 4-Layer MLP Layer Benchmark
                 mlp_args = {"num_classes": num_classes,
@@ -134,7 +144,8 @@ if __name__ == '__main__':
                             }
                 trainer = Trainer(MLP, B, mlp_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, y=y)
+                timings = trainer.benchmark(params, x, y=y)
+                wandb.log({"4-layer MLP Benchmark Time": timings})
 
                 # CNN
                 cnn_args = {"out_filters": [64, 128, 256],
@@ -143,8 +154,14 @@ if __name__ == '__main__':
                             }
                 trainer = Trainer(CNN, B, cnn_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, y=y)
+                timings = trainer.benchmark(params, x, y=y)
+                wandb.log(
+                            {
+                                "ConvNet with Global Pooling Benchmark Time": timings
+                            }
+                        )
                 
+                wandb.log({"num_models": B, "batch_size": N})
             except Exception as e:
                 # Log the exception to the console
                 print(f"Error during benchmark with B={B} and N={N}: {e}")
