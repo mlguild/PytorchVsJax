@@ -33,6 +33,7 @@ class CNN(nn.Module):
         # the x dimension here will be (batch_size, H, W, out_filter)
         # after the pooling operation, it will be (batch_size, out_filter)
         x = jnp.mean(x, axis=(1, 2))
+        x = nn.Dense(self.num_classes)(x)
         return x
 
 class Trainer:
@@ -97,15 +98,8 @@ if __name__ == '__main__':
                 trainer.benchmark(params, x, y)
 
                 # Single Layer Convolution
+                # TODO
 
-                # CNN
-                cnn_args = {"out_filters": [64, 128, 256],
-                            "kernel_sizes": [(3, 3), (3, 3), (3, 3)],
-                            "num_classes": num_classes,
-                            }
-                trainer = Trainer(CNN, B, cnn_args)
-                params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, y)
 
                 # 4-Layer MLP Layer Benchmark
                 mlp_args = {"num_classes": num_classes,
@@ -114,6 +108,15 @@ if __name__ == '__main__':
                 trainer = Trainer(MLP, B, mlp_args)
                 params = trainer.init_model(key, x)
                 trainer.benchmark(params, x, y )
+                
+                # CNN
+                cnn_args = {"out_filters": [64, 128, 256],
+                            "kernel_sizes": [(3, 3), (3, 3), (3, 3)],
+                            "num_classes": num_classes,
+                            }
+                trainer = Trainer(CNN, B, cnn_args)
+                params = trainer.init_model(key, x)
+                trainer.benchmark(params, x, y)
                 
             except Exception as e:
                 # Log the exception to the console
