@@ -53,28 +53,52 @@ class Trainer:
         loss = jnp.mean(jax.nn.log_softmax(logits) * one_hot_labels)
         return -loss
     
-    def benchmark(self, params, x, y, R=100):
-        timings = []
+    def benchmark(self, params, x, y = None, backward = True, R=100):
+        """
+        Benchmark a given layer/model for forward and backward pass.
+        """
+        fprop_timings = []
+        bprop_timings = []
+        combined_timings = []
+        
+        forward = jax.jit(self.model.apply)
         vmapped_val_and_grad = jax.vmap(jax.value_and_grad(self.loss), in_axes=(0, 0, 0))
         
         for _ in range(R):
             start_time = time()
-            out, _ = vmapped_val_and_grad(params, x, y)
-            end_time = time()
-            timings.append(end_time - start_time)
-        
-        mean_time = torch.tensor(timings).mean()
-        std_time = torch.tensor(timings).std()
-        max_time = torch.tensor(timings).max()
-        min_time = torch.tensor(timings).min()
-        median_time = torch.tensor(timings).median()
+            out = forward(params, x)
+            fprop_timings.append(time() - start_time)
+
+            if y is not None and backward:
+                start_time = time()
+                out, _ = vmapped_val_and_grad(params, x, y)
+                end_time = time()
+                bprop_timings.append(time() - start_time - fprop_timings[-1])
+
+            combined_timings.append(
+                fprop_timings[-1] + (bprop_timings[-1] if bprop_timings else 0)
+                )
+            
+        def compute_stats(timings):
+                timings_tensor = torch.tensor(timings)
+                mean_time = torch.mean(timings_tensor).item()
+                std_time = torch.std(timings_tensor).item()
+                max_time = torch.max(timings_tensor).item()
+                min_time = torch.min(timings_tensor).item()
+                median_time = torch.median(timings_tensor).item()
+
+                return {
+                    "mean": mean_time,
+                    "std": std_time,
+                    "max": max_time,
+                    "min": min_time,
+                    "median": median_time,
+                }
 
         return {
-            "mean": mean_time,
-            "std": std_time,
-            "max": max_time,
-            "min": min_time,
-            "median": median_time,
+            "fprop": compute_stats(fprop_timings),
+            "bprop": compute_stats(bprop_timings),
+            "combined": compute_stats(combined_timings),
         }
 
 if __name__ == '__main__':
@@ -95,11 +119,14 @@ if __name__ == '__main__':
                             }
                 trainer = Trainer(MLP, B, mlp_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, y)
+                trainer.benchmark(params, x, backward=False)
 
                 # Single Layer Convolution
-                # TODO
-
+                cnn_args = {"features": num_classes,
+                            "kernel_size": (3, 3),}
+                trainer = Trainer(nn.Conv, B, cnn_args)
+                params = trainer.init_model(key, x)
+                trainer.benchmark(params, x, backward=False)
 
                 # 4-Layer MLP Layer Benchmark
                 mlp_args = {"num_classes": num_classes,
@@ -107,8 +134,8 @@ if __name__ == '__main__':
                             }
                 trainer = Trainer(MLP, B, mlp_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, y )
-                
+                trainer.benchmark(params, x, y=y)
+
                 # CNN
                 cnn_args = {"out_filters": [64, 128, 256],
                             "kernel_sizes": [(3, 3), (3, 3), (3, 3)],
@@ -116,7 +143,7 @@ if __name__ == '__main__':
                             }
                 trainer = Trainer(CNN, B, cnn_args)
                 params = trainer.init_model(key, x)
-                trainer.benchmark(params, x, y)
+                trainer.benchmark(params, x, y=y)
                 
             except Exception as e:
                 # Log the exception to the console
