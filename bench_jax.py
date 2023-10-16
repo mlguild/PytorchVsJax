@@ -67,6 +67,10 @@ class Trainer:
         
         forward = jax.vmap(self.forward_pass, in_axes=(0, 0))
         vmapped_val_and_grad = jax.vmap(jax.value_and_grad(self.loss), in_axes=(0, 0, 0))
+
+        # Run forward and forward/backward passes once to compile the routines
+        forward(params, x)
+        vmapped_val_and_grad(params, x, y)
         
         for _ in range(R):
             start_time = time()
@@ -76,7 +80,6 @@ class Trainer:
             if y is not None and backward:
                 start_time = time()
                 out, _ = vmapped_val_and_grad(params, x, y)
-                end_time = time()
                 bprop_timings.append(time() - start_time - fprop_timings[-1])
 
             combined_timings.append(
