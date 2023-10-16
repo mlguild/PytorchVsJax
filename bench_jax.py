@@ -53,6 +53,10 @@ class Trainer:
         loss = jnp.mean(jax.nn.log_softmax(logits) * one_hot_labels)
         return -loss
     
+    @partial(jax.jit, static_argnums=(0,))
+    def forward_pass(self, params, x):
+        return self.model.apply(params, x)
+
     def benchmark(self, params, x, y = None, backward = True, R=100):
         """
         Benchmark a given layer/model for forward and backward pass.
@@ -61,7 +65,7 @@ class Trainer:
         bprop_timings = []
         combined_timings = []
         
-        forward = jax.vmap(jax.jit(self.model.apply), in_axes=(0, 0))
+        forward = jax.vmap(self.forward_pass, in_axes=(0, 0))
         vmapped_val_and_grad = jax.vmap(jax.value_and_grad(self.loss), in_axes=(0, 0, 0))
         
         for _ in range(R):
