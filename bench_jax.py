@@ -136,7 +136,8 @@ def run_benchmark(B=1, N=1, dtype="float32", benchmark_type="single_mlp"):
     mode = "jit"
 
     wandb.init(
-        project="pytorch-vs-jax-benchmarking",
+        project=WANDB_PROJECT,
+        entity=WANDB_ENTITY,
         name=f"jax-benchmark-B{B}-N{N}-dtype{dtype}-mode{mode}-type{benchmark_type}",
         reinit=False,
     )
