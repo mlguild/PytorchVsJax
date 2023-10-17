@@ -1,3 +1,4 @@
+import os
 from time import time
 from typing import Dict, Optional, Tuple
 
@@ -9,6 +10,9 @@ import wandb
 from batch_ops_pytorch import BatchConv2DLayer, BatchLinearLayer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Get environment variables
+WANDB_ENTITY = os.getenv('WANDB_ENTITY')
+WANDB_PROJECT = os.environ.get('WANDB_PROJECT')
 
 
 def benchmark(
@@ -172,7 +176,8 @@ def main():
                 for N in [1, 10, 50, 100, 500]:
                     try:
                         wandb.init(
-                            project="pytorch-vs-jax-benchmarking",
+                            project=WANDB_PROJECT,
+                            entity=WANDB_ENTITY,
                             name=f"pytorch-benchmark-B{B}-N{N}-dtype{dtype}-mode{mode}",
                             reinit=True,
                         )

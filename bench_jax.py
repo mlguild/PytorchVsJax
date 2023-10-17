@@ -1,3 +1,4 @@
+import os
 from functools import partial
 from time import time
 from typing import Any, Sequence
@@ -9,6 +10,9 @@ from flax import linen as nn
 
 import wandb
 
+# Get environment variables
+WANDB_ENTITY = os.getenv('WANDB_ENTITY')
+WANDB_PROJECT = os.environ.get('WANDB_PROJECT')
 
 class MLP(nn.Module):
     hidden_dims: Sequence[int]
