@@ -80,6 +80,7 @@ class Trainer:
             jax.value_and_grad(self.loss), in_axes=(0, 0, 0)
         )
 
+        # Run forward and forward/backward passes once to compile the routines
         forward(params, x)
         vmapped_val_and_grad(params, x, y)
 
@@ -94,7 +95,7 @@ class Trainer:
                 bprop_timings.append(time() - start_time - fprop_timings[-1])
 
             combined_timings.append(
-                fprop_timings[-1] + (bprop_timings[-1] if backward else 0)
+                fprop_timings[-1] + (bprop_timings[-1] if bprop_timings else 0)
             )
 
         def compute_stats(timings):
@@ -132,11 +133,13 @@ def run_benchmark(B=1, N=1, dtype="float32", benchmark_type="single_mlp"):
 
     wandb.init(
         project="pytorch-vs-jax-benchmarking",
-        name=f"pytorch-benchmark-B{B}-N{N}-dtype{dtype}-mode{mode}",
-        reinit=True,
+        name=f"jax-benchmark-B{B}-N{N}-dtype{dtype}-mode{mode}-type{benchmark_type}",
+        reinit=False,
     )
     wandb.config.num_models = B
     wandb.config.batch_size = N
+    wandb.config.dtype = dtype
+    wandb.config.framework = "jax"
 
     if benchmark_type == "single_mlp":
         # Single Layer MLP
@@ -147,7 +150,7 @@ def run_benchmark(B=1, N=1, dtype="float32", benchmark_type="single_mlp"):
         }
         trainer = Trainer(MLP, B, mlp_args, num_classes=num_classes)
         params = trainer.init_model(key, x)
-        timings = trainer.benchmark(params, x, backward=False)
+        timings = trainer.benchmark(params, x, y, backward=True)
         wandb.log({"MLP Benchmark Time": timings})
 
     elif benchmark_type == "single_conv":
@@ -172,7 +175,7 @@ def run_benchmark(B=1, N=1, dtype="float32", benchmark_type="single_mlp"):
         }
         trainer = Trainer(MLP, B, mlp_args, num_classes=num_classes)
         params = trainer.init_model(key, x)
-        timings = trainer.benchmark(params, x, backward=False)
+        timings = trainer.benchmark(params, x, y, backward=True)
         wandb.log({"4-layer MLP Benchmark Time": timings})
     elif benchmark_type == "four_conv":
         # 4-Layer Convolution
@@ -189,7 +192,7 @@ def run_benchmark(B=1, N=1, dtype="float32", benchmark_type="single_mlp"):
             num_classes=num_classes,
         )
         params = trainer.init_model(key, x)
-        timings = trainer.benchmark(params, x, backward=False)
+        timings = trainer.benchmark(params, x, y, backward=True)
         wandb.log({"ConvNet with Global Pooling Benchmark Time": timings})
 
 

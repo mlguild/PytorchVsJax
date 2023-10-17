@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import wandb
 from batch_ops_pytorch import BatchConv2DLayer, BatchLinearLayer
 
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def benchmark(
@@ -18,7 +18,7 @@ def benchmark(
     biases: Optional[Tuple[torch.Tensor]] = None,
     y: Optional[torch.Tensor] = None,
     backward: bool = True,
-    R: int = 1000,
+    R: int = 100,
     dtype: torch.dtype = torch.float32,
     jit_method: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
@@ -178,10 +178,13 @@ def main():
                         )
                         wandb.config.num_models = B
                         wandb.config.batch_size = N
+                        wandb.config.dtype = dtype
+                        wandb.config.framework = "pytorch"
+                        wandb.config.mode = mode
 
-                        x = torch.randn(B, N, C, H, W, requires_grad=True).to(
-                            device
-                        )
+                        x = torch.randn(
+                            (B, N, C, H, W), requires_grad=True
+                        ).to(device)
                         y = torch.randint(0, num_classes, (B, N)).to(device)
 
                         # Single Layer Benchmark
@@ -230,7 +233,7 @@ def main():
                             mlp_net, x, mlp_weights, mlp_biases, y=y
                         )
                         wandb.log({"4-layer MLP Benchmark Time": mlp_net_time})
-                        wandb.log({"num_models": B, "batch_size": N})
+
                     except Exception as e:
                         # Log the exception to the console
                         print(
