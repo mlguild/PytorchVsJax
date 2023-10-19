@@ -1,54 +1,17 @@
 import os
 from functools import partial
 from time import time
-from typing import Any, Sequence
 
 import fire
 import jax
 import jax.numpy as jnp
-from flax import linen as nn
-
+from models.cnn import CNN
+from models.mlp import MLP
 import wandb
 
 # Get environment variables
 WANDB_ENTITY = os.getenv('WANDB_ENTITY')
 WANDB_PROJECT = os.environ.get('WANDB_PROJECT')
-
-class MLP(nn.Module):
-    hidden_dims: Sequence[int]
-    num_classes: int
-    dtype: jnp.dtype = jnp.float32
-
-    @nn.compact
-    def __call__(self, x):
-        x = x.reshape((x.shape[0], -1))
-        for dims in self.hidden_dims:
-            x = nn.relu(nn.Dense(dims, dtype=self.dtype)(x))
-        return nn.Dense(self.num_classes, dtype=self.dtype)(x)
-
-
-class CNN(nn.Module):
-    out_filters: Sequence[int]
-    kernel_sizes: Sequence[tuple]
-    num_classes: int
-    dtype: jnp.dtype = jnp.float32
-
-    @nn.compact
-    def __call__(self, x) -> Any:
-        for out_filter, kernel_size in zip(
-            self.out_filters, self.kernel_sizes
-        ):
-            x = nn.relu(
-                nn.Conv(
-                    features=out_filter,
-                    kernel_size=kernel_size,
-                    dtype=self.dtype,
-                )(x)
-            )
-        x = jnp.mean(x, axis=(1, 2))
-        x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
-        return x
-
 
 class Trainer:
     def __init__(

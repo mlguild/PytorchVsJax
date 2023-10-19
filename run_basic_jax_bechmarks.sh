@@ -9,8 +9,8 @@ for dtype in "${dtypes[@]}"; do
   for B in "${num_models[@]}"; do
     for N in "${batch_sizes[@]}"; do
         for bench in "${bench_type[@]}"; do
-            echo "Running bench_jax.py with B=$B, N=$N, dtype=$dtype, benchmark_type=$bench"
-            python bench_jax.py --B="$B" --N="$N" --dtype="$dtype" --benchmark_type="$bench"
+            echo "Running jax/bench.py with B=$B, N=$N, dtype=$dtype, benchmark_type=$bench"
+            python jax/bench.py --B="$B" --N="$N" --dtype="$dtype" --benchmark_type="$bench"
             sleep 5
         done
     done
